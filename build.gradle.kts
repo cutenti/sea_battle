@@ -7,12 +7,12 @@ repositories {
     mavenCentral()
 }
 
-dependencies {
-    testImplementation(kotlin("test"))
-}
-
 tasks.test {
     useJUnitPlatform()
+}
+
+dependencies {
+    testImplementation(kotlin("test"))
 }
 
 kotlin {
