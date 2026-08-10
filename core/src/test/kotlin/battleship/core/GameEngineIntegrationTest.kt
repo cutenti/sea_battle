@@ -1,3 +1,5 @@
+package battleship.core
+
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
@@ -8,11 +10,9 @@ class GameEngineIntegrationTest {
         val engine = GameEngine(GameRulesValidatorImpl())
         val p1 = Player("p1", "P1")
         val p2 = Player("p2", "P2")
-        // Корабль на (0,0)
+        // Корабль на (0,0). По умолчанию ход инициализируется за p1
         val session = GameSession("g1", p1, p2, Board(emptyList()), Board(listOf(Ship(listOf(Position(0, 0))))))
         
-        session.currentTurnPlayerId = p1.id
-
         // Выстрел мимо (1, 1)
         val result = engine.processMove(session, p1.id, Position(1, 1))
 

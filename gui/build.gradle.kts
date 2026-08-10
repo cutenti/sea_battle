@@ -17,5 +17,5 @@ dependencies {
 }
 
 application {
-    mainClass.set("gui.MainKt")
+    mainClass.set("battleship.gui.MainKt")
 }

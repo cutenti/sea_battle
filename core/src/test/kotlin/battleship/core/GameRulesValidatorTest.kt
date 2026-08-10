@@ -1,3 +1,5 @@
+package battleship.core
+
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
@@ -22,8 +24,7 @@ class GameRulesValidatorTest {
         val p2 = Player("2", "P2")
         val session = GameSession("g1", p1, p2, Board(emptyList()), Board(emptyList()))
         
-        session.currentTurnPlayerId = p1.id
-        
+        // По умолчанию очередь первого игрока (p1). Пытаемся передать ход второго (p2).
         assertFalse(validator.validateMove(session, p2.id, Position(0, 0)))
     }
 }

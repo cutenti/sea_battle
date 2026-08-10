@@ -1,3 +1,5 @@
+package battleship.core
+
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
@@ -7,7 +9,7 @@ class ShipTest {
     fun `isSunk returns false when not all positions are hit`() {
         val ship = Ship(listOf(Position(0, 0), Position(0, 1)))
         
-        ship.hits.add(Position(0, 0)) // Ранили, но не убили
+        ship.addHit(Position(0, 0))
         
         assertFalse(ship.isSunk())
     }
@@ -16,8 +18,8 @@ class ShipTest {
     fun `isSunk returns true when all positions are hit`() {
         val ship = Ship(listOf(Position(0, 0), Position(0, 1)))
         
-        ship.hits.add(Position(0, 0))
-        ship.hits.add(Position(0, 1)) // Попали во все палубы
+        ship.addHit(Position(0, 0))
+        ship.addHit(Position(0, 1))
         
         assertTrue(ship.isSunk())
     }
@@ -31,7 +33,7 @@ class BoardTest {
         val ship2 = Ship(listOf(Position(1, 1)))
         val board = Board(listOf(ship1, ship2))
         
-        ship1.hits.add(Position(0, 0)) // Первый корабль потоплен, второй цел
+        ship1.addHit(Position(0, 0))
         
         assertFalse(board.isAllShipsSunk())
     }
@@ -42,8 +44,8 @@ class BoardTest {
         val ship2 = Ship(listOf(Position(1, 1)))
         val board = Board(listOf(ship1, ship2))
         
-        ship1.hits.add(Position(0, 0))
-        ship2.hits.add(Position(1, 1))
+        ship1.addHit(Position(0, 0))
+        ship2.addHit(Position(1, 1))
         
         assertTrue(board.isAllShipsSunk())
     }

@@ -1,3 +1,5 @@
+package battleship.core
+
 class InMemoryPlayerRepository {
     private val players = mutableMapOf<String, Player>()
     fun save(player: Player) { players[player.id] = player }
