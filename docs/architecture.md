@@ -1,36 +1,38 @@
-# Архитектура проекта Battleship
+# Архитектура Battleship
 
-## 1. Data Classes
-* `Position`: Координаты клетки (x, y).
-* `ShipType`: Перечисление типов кораблей с указанием их размеров (`CARRIER` - 4-палубник, `BATTLESHIP`, `CRUISER`, `DESTROYER` - 1-палубник).
-* `Ship`: Определяет корабль: его тип (`ShipType`), занимаемые позиции (`positions`) и попадания (`hits`). Содержит логику проверки затопления (`isSunk`).
-* `Board`: Игровое поле. Хранит только список кораблей (`ships`) и множество координат всех совершенных выстрелов (`shots`). Вычисляет затопление всех кораблей (`isAllShipsSunk`).
-* `Player`: Профиль игрока (ID, имя, рейтинг).
-* `GameSession`: Текущее состояние партии. Включает игроков, их доски, текущую стадию `GameState` (`SETUP`, `IN_PROGRESS`, `FINISHED`), прямую ссылку на активного игрока (`currentTurnPlayerId`) и ID победителя.
-* `GameState`: Перечисление состояний игры (`SETUP`, `IN_PROGRESS`, `FINISHED`).
-* `MoveResult`: Результат хода (`MISS`, `HIT`, `KILLED`, `ALREADY_SHOT`, `INVALID_MOVE`, `GAME_OVER`).
+## Модули
 
-## 2. Основные интерфейсы
-* `IGameRulesValidator`:
-  * `isValidPosition(pos: Position)` — проверка выхода за пределы игрового поля.
-  * `validateSetup(board: Board)`: Проверяет правильность начальной расстановки кораблей перед стартом (наличие необходимых типов кораблей `ShipType`, нахождение в пределах сетки, отсутствие касаний по сторонам и диагоналям).
-  * `validateMove(session: GameSession, pos: Position)`: Проверяет допустимость хода (игра находится в статусе `IN_PROGRESS`, выстрел производится активным игроком `session.currentTurnPlayerId`, координаты в пределах поля).
-* `IGameEngine`:
-  * `processMove(session: GameSession, pos: Position)` — центральный метод обработки хода. Вызывает валидатор правил, обновляет состояние поля сессии, переключает ход и обновляет рейтинг через `IRatingCalculator` в случае окончания игры.
-* `IRatingCalculator`:
-  * `calculateRatingChange(winner: Player, loser: Player)` — расчет изменения рейтинга по завершении игры.
-* `InMemoryPlayerRepository` / `InMemoryGameRepository`:
-  * Интерфейсы доступа к данным для сохранения и загрузки истории игр и профилей игроков
+- `core` содержит модели партии, правила, игровой движок, генератор доски, рейтинг и интерфейсы репозиториев. Он не зависит от CLI.
+- `cli` принимает команды, вызывает API `core`, отображает поля и журнал. Единственная реализация репозиториев сейчас хранит данные в `MutableMap`.
+- `gui` пока не содержит реализации игрового интерфейса.
 
-## 3. Поток исполнения
-1. **Ввод:** Пользователь через графический или консольный интерфейс указывает координаты выстрела.
-2. **Запрос:** UI вызывает метод `processMove(session, pos)` в сервисе `IGameEngine`.
-3. **Валидация:** `IGameEngine` запрашивает у `IGameRulesValidator` проверку стадии игры (`IN_PROGRESS`), очередности хода (`currentTurnPlayerId`) и корректности координат. При ошибке возвращается `INVALID_MOVE`.
-4. **Обработка:** При успешной валидации `IGameEngine` проверяет, не было ли выстрела в эту клетку ранее (возвращает `ALREADY_SHOT`). Если клетка новая, координата добавляется в `shots` доски противника.
-5. **Изменение состояния:** В зависимости от попадания, `IGameEngine` рассчитывает результат (`HIT`, `KILLED`, `MISS`). При промахе право хода передается противнику. При уничтожении последнего корабля статус игры меняется на `FINISHED`, фиксируется победитель, рассчитывается изменение рейтинга через `IRatingCalculator` и возвращается `GAME_OVER`.
-6. **Сохранение и обновление:** `InMemoryGameRepository` сохраняет состояние, а UI обновляется на основе полученного `MoveResult` и текущего состояния `Board`.
+## Модели
 
-## 4. Диаграмма классов
+- `Position(x, y)` — координаты клетки.
+- `Ship(positions)` хранит клетки корабля и попадания; `isSunk()` проверяет, поражены ли все клетки.
+- `Board(ships)` содержит корабли и набор выстрелов, сделанных по этой доске. `isAllShipsSunk()` проверяет победу над флотом.
+- `Player(id, name, rating)` хранит игрока и его рейтинг.
+- `GameSession(id, player1, player2, board1, board2)` хранит две доски, состояние, текущего игрока, победителя и журнал `MoveRecord(playerId, position, result)`.
+- `GameState`: `SETUP`, `IN_PROGRESS`, `FINISHED`.
+- `MoveResult`: `MISS`, `HIT`, `KILLED`, `ALREADY_SHOT`, `INVALID_MOVE`, `GAME_OVER`.
+
+## Сервисы и интерфейсы core
+
+- `IGameRulesValidator` и `GameRulesValidatorImpl` проверяют координаты и ходы, форму корабля, допустимость его размещения и полную классическую расстановку из десяти кораблей (`1x4`, `2x3`, `3x2`, `4x1`).
+- `GameEngine` координирует запуск и обработку хода. `startGame(session)` валидирует обе доски и переводит сессию из `SETUP` в `IN_PROGRESS` только при успешной проверке. `processMove(session, playerId, pos)` записывает результат каждой попытки в журнал, обновляет попадания и очередь. При победе завершает сессию и применяет рейтинг.
+- `IRatingCalculator.calculateRatingChange(winner, loser)` предоставляет величину изменения рейтинга. `FixedRatingCalculator` возвращает 10; движок добавляет эти очки победителю и вычитает их у проигравшего.
+- `IPlayerRepository` и `IGameRepository` задают операции `save` и `findById`. `InMemoryPlayerRepository` и `InMemoryGameRepository` реализуют их на `MutableMap`.
+- `BoardFactory.createRandomBoard()` генерирует случайную классическую расстановку.
+
+## Поток партии
+
+1. CLI создаёт игроков через `IPlayerRepository`, генерирует обе доски и собирает `GameSession` в состоянии `SETUP`.
+2. CLI вызывает `GameEngine.startGame`. Если `IGameRulesValidator.validateBoard` отклоняет любую доску, партия не сохраняется и не начинается. При успехе сессия становится `IN_PROGRESS`.
+3. Команда `move` передаётся в `GameEngine.processMove`. Валидатор проверяет состояние, очередь и координаты. Повторный выстрел возвращает `ALREADY_SHOT`; недопустимая попытка возвращает `INVALID_MOVE`.
+4. Для новой допустимой клетки движок записывает выстрел. Попадание оставляет ход текущему игроку, промах передаёт очередь. Потопление последнего корабля переводит партию в `FINISHED`, задаёт победителя и обновляет рейтинг.
+5. Результат попытки добавляется в `GameSession.moves`. CLI сохраняет сессию через `IGameRepository` и выводит очередь (либо победителя по завершении), доступное игроку представление досок и журнал.
+
+## Диаграмма
 
 ```mermaid
 classDiagram
@@ -38,16 +40,6 @@ classDiagram
         +int x
         +int y
     }
-
-    class ShipType {
-        <<enumeration>>
-        CARRIER
-        BATTLESHIP
-        CRUISER
-        DESTROYER
-        +int size
-    }
-
     class MoveResult {
         <<enumeration>>
         MISS
@@ -57,33 +49,35 @@ classDiagram
         INVALID_MOVE
         GAME_OVER
     }
-
     class GameState {
         <<enumeration>>
         SETUP
         IN_PROGRESS
         FINISHED
     }
-
+    class MoveRecord {
+        +String playerId
+        +Position position
+        +MoveResult result
+    }
     class Ship {
-        +ShipType type
         +List~Position~ positions
         +Set~Position~ hits
+        +addHit(pos)
         +isSunk() Boolean
     }
-
     class Board {
         +List~Ship~ ships
         +Set~Position~ shots
+        +addShot(pos)
         +isAllShipsSunk() Boolean
     }
-
     class Player {
         +String id
         +String name
         +int rating
+        +updateRating(newRating)
     }
-
     class GameSession {
         +String id
         +Player player1
@@ -93,50 +87,58 @@ classDiagram
         +GameState state
         +String currentTurnPlayerId
         +String winnerId
+        +List~MoveRecord~ moves
+        +begin()
+        +recordMove(move)
+        +switchTurn()
+        +finishGame(winner)
     }
-
     class IGameRulesValidator {
         <<interface>>
-        +isValidPosition(pos: Position) Boolean
-        +validateSetup(board: Board) Boolean
-        +validateMove(session: GameSession, pos: Position) Boolean
+        +isValidPosition(pos) Boolean
+        +validateMove(session, playerId, pos) Boolean
+        +validateBoard(board) Boolean
+        +isValidShipShape(ship) Boolean
+        +canPlaceShip(board, ship) Boolean
     }
-
-    class GameRulesValidatorImpl {
-        +isValidPosition(pos: Position) Boolean
-        +validateSetup(board: Board) Boolean
-        +validateMove(session: GameSession, pos: Position) Boolean
-    }
-
+    class GameRulesValidatorImpl
     class IRatingCalculator {
         <<interface>>
-        +calculateRatingChange(winner: Player, loser: Player) int
+        +calculateRatingChange(winner, loser) int
+    }
+    class FixedRatingCalculator
+    class GameEngine {
+        +startGame(session) Boolean
+        +processMove(session, playerId, pos) MoveResult
+    }
+    class IPlayerRepository {
+        <<interface>>
+        +save(player)
+        +findById(id) Player?
+    }
+    class IGameRepository {
+        <<interface>>
+        +save(session)
+        +findById(id) GameSession?
+    }
+    class InMemoryPlayerRepository
+    class InMemoryGameRepository
+    class BoardFactory {
+        <<object>>
+        +createValidClassicalBoard() Board
+        +createRandomBoard() Board
     }
 
-    class EloRatingCalculator {
-        +calculateRatingChange(winner: Player, loser: Player) int
-    }
-
-    class IGameEngine {
-        +processMove(session: GameSession, pos: Position) MoveResult
-    }
-
-    class InMemoryPlayerRepository {
-        +save(player: Player)
-        +findById(id: String) Player
-    }
-
-    class InMemoryGameRepository {
-        +save(session: GameSession)
-        +findById(id: String) GameSession
-    }
-
-    Ship "1" --> "1" ShipType
-    Board "1" *-- "1..*" Ship
+    Board "1" *-- "0..*" Ship
     GameSession "1" *-- "2" Board
     GameSession "1" --> "2" Player
+    GameSession "1" *-- "0..*" MoveRecord
     IGameRulesValidator <|.. GameRulesValidatorImpl
-    IRatingCalculator <|.. EloRatingCalculator
-    IGameEngine --> IGameRulesValidator
-    IGameEngine --> IRatingCalculator
-    IGameEngine ..> GameSession
+    IRatingCalculator <|.. FixedRatingCalculator
+    IPlayerRepository <|.. InMemoryPlayerRepository
+    IGameRepository <|.. InMemoryGameRepository
+    GameEngine --> IGameRulesValidator
+    GameEngine --> IRatingCalculator
+    GameEngine ..> GameSession
+    BoardFactory ..> GameRulesValidatorImpl
+```

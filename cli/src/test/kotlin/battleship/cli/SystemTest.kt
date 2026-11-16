@@ -27,6 +27,7 @@ class SystemTest {
 
         val session = GameSession("g1", p1, p2, b1, b2)
         gameRepo.save(session)
+        assertTrue(engine.startGame(session))
 
         val retrievedSession = gameRepo.findById("g1")
         assertNotNull(retrievedSession)

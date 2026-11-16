@@ -4,6 +4,7 @@ data class Position(val x: Int, val y: Int)
 
 enum class MoveResult { MISS, HIT, KILLED, ALREADY_SHOT, INVALID_MOVE, GAME_OVER }
 enum class GameState { SETUP, IN_PROGRESS, FINISHED }
+data class MoveRecord(val playerId: String, val position: Position, val result: MoveResult)
 
 class Player(val id: String, val name: String, rating: Int = 1000) {
     var rating: Int = rating
@@ -43,12 +44,23 @@ class GameSession(
     val board1: Board,
     val board2: Board
 ) {
-    var state: GameState = GameState.IN_PROGRESS
+    var state: GameState = GameState.SETUP
         private set
     var currentTurnPlayerId: String = player1.id
         private set
     var winnerId: String? = null
         private set
+    private val _moves = mutableListOf<MoveRecord>()
+    val moves: List<MoveRecord> get() = _moves.toList()
+
+    internal fun begin() {
+        check(state == GameState.SETUP) { "Only a game in setup can be started" }
+        state = GameState.IN_PROGRESS
+    }
+
+    internal fun recordMove(move: MoveRecord) {
+        _moves.add(move)
+    }
 
     fun switchTurn() {
         currentTurnPlayerId = if (currentTurnPlayerId == player1.id) player2.id else player1.id

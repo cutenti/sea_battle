@@ -22,15 +22,16 @@ object BoardFactory {
 
     fun createRandomBoard(): Board {
         val validator = GameRulesValidatorImpl()
-        while (true) {
+
+        for (attempt in 1..2000) {
             val ships = mutableListOf<Ship>()
             var failed = false
 
             for (size in SHIP_SIZES) {
                 var placed = false
                 var attempts = 0
-                
-                while (!placed && attempts < 100) {
+
+                while (!placed && attempts < 200) {
                     attempts++
                     val horizontal = Random.nextBoolean()
                     val startX = if (horizontal) Random.nextInt(10 - size + 1) else Random.nextInt(10)
@@ -41,9 +42,9 @@ object BoardFactory {
                     }
 
                     val candidateShip = Ship(positions)
-                    val tempBoard = Board(ships + candidateShip)
+                    val tempBoard = Board(ships)
 
-                    if (validator.validateBoard(tempBoard)) {
+                    if (validator.canPlaceShip(tempBoard, candidateShip)) {
                         ships.add(candidateShip)
                         placed = true
                     }
@@ -55,9 +56,14 @@ object BoardFactory {
                 }
             }
 
-            if (!failed && ships.size == 10) {
-                return Board(ships)
+            if (!failed) {
+                val board = Board(ships)
+                if (validator.validateBoard(board)) {
+                    return board
+                }
             }
         }
+
+        throw IllegalStateException("Unable to generate valid board")
     }
 }

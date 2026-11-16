@@ -10,7 +10,7 @@ class SystemEndToEndTest {
         // Инициализация системы
         val playerRepo = InMemoryPlayerRepository()
         val gameRepo = InMemoryGameRepository()
-        val engine = GameEngine(GameRulesValidatorImpl())
+        val engine = GameEngine(PermissiveBoardRulesValidator())
 
         // 1. Создание игроков
         val p1 = Player("p1", "Alice")
@@ -24,6 +24,7 @@ class SystemEndToEndTest {
         val session = GameSession("g1", p1, p2, b1, b2)
         gameRepo.save(session)
 
+        assertTrue(engine.startGame(session))
         // 3. Alice стреляет мимо
         assertEquals(
             MoveResult.MISS, 
@@ -47,13 +48,14 @@ class SystemEndToEndTest {
 
     @Test
     fun `System handles invalid moves, out of turn shots, and repeated shots gracefully`() {
-        val engine = GameEngine(GameRulesValidatorImpl())
+        val engine = GameEngine(PermissiveBoardRulesValidator())
         val p1 = Player("p1", "Alice")
         val p2 = Player("p2", "Bob")
         val b1 = Board(listOf(Ship(listOf(Position(0, 0)))))
         val b2 = Board(listOf(Ship(listOf(Position(9, 9)))))
         val session = GameSession("g1", p1, p2, b1, b2)
 
+        assertTrue(engine.startGame(session))
         // 1. Bob пытается выстрелить первым (не его очередь)
         assertEquals(
             MoveResult.INVALID_MOVE, 
