@@ -12,12 +12,7 @@ interface IGameRepository {
     fun findAll(): List<GameSession>
 }
 
-/**
- * Хранит те же объекты, которые меняет движок.
- * Повторный save после хода нужен как контракт: когда на месте map появится база,
- * без явной записи диск не узнает об изменении.
- * LinkedHashMap сохраняет порядок добавления, поэтому список игроков стабилен.
- */
+/** In-memory adapters preserve insertion order and store the mutable entities by reference. */
 class InMemoryPlayerRepository : IPlayerRepository {
     private val players = linkedMapOf<String, Player>()
 

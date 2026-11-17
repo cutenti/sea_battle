@@ -1,16 +1,10 @@
 package battleship.core
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 class GameEngineTest {
-    private lateinit var engine: GameEngine
-
-    @BeforeEach
-    fun setup() {
-        engine = GameEngine(GameRulesValidatorImpl(), EloRatingCalculator())
-    }
+    private val engine = GameEngine(GameRulesValidatorImpl(), EloRatingCalculator())
 
     @Test
     fun `processMove returns INVALID_MOVE while the session is in setup`() {
@@ -92,9 +86,8 @@ class GameEngineTest {
         assertEquals(0, loser.rating)
     }
 
-    private fun session(own: Board = Board(emptyList()), opponent: Board): GameSession {
-        return GameSession("g1", Player("p1", "P1"), Player("p2", "P2"), own, opponent)
-    }
+    private fun session(own: Board = Board(emptyList()), opponent: Board): GameSession =
+        GameSession("g1", Player("p1", "P1"), Player("p2", "P2"), own, opponent)
 
     private fun started(opponent: Board): GameSession = session(opponent = opponent).also { it.begin() }
 }

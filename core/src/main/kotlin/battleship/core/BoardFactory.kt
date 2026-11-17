@@ -22,17 +22,13 @@ object BoardFactory {
         )
     }
 
-    /**
-     * Корабли ставятся по одному. Каждый кандидат проверяется через [IGameRulesValidator.canPlaceShip]:
-     * форма, границы и касания. Полный комплект в этот момент ещё не собран, поэтому
-     * [IGameRulesValidator.validateBoard] здесь не вызывается — из-за этого генератор раньше зацикливался.
-     * Готовая доска проверяется целиком. Число попыток ограничено.
-     */
     fun createRandomBoard(
         validator: IGameRulesValidator = GameRulesValidatorImpl(),
         random: Random = Random,
         maxAttempts: Int = 300,
     ): Board {
+        require(maxAttempts > 0) { "Число попыток должно быть положительным" }
+
         repeat(maxAttempts) {
             val ships = mutableListOf<Ship>()
             var failed = false

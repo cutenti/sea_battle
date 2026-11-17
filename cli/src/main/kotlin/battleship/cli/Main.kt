@@ -5,6 +5,7 @@ import battleship.core.EloRatingCalculator
 import battleship.core.GameEngine
 import battleship.core.GameRulesValidatorImpl
 import battleship.core.GameService
+import battleship.core.GameState
 import battleship.core.InMemoryGameRepository
 import battleship.core.InMemoryPlayerRepository
 import battleship.core.InvalidGameSetupException
@@ -66,7 +67,8 @@ private fun startGame(
             board2 = BoardFactory.createRandomBoard(validator),
         )
         println(Messages.GAME_STARTED.format(session.id, session.currentTurnPlayerId))
-        println(SessionPrinter.format(session))
+        print(BoardRenderer.renderForPlayer(session, first.id))
+        printMoveHistory(session)
     } catch (error: InvalidGameSetupException) {
         println(error.message)
     }
@@ -88,6 +90,40 @@ private fun move(service: GameService, parsed: ParsedCommand.Move) {
         return
     }
     val result = service.recordMove(session, parsed.playerId, Position(parsed.x, parsed.y))
-    println(Messages.MOVE_RESULT.format(result.name, session.currentTurnPlayerId))
-    SessionPrinter.finishedLine(session)?.let(::println)
+    println(Messages.MOVE_RESULT.format(result.name))
+    if (session.state == GameState.FINISHED) {
+        SessionPrinter.finishedLine(session)?.let(::println)
+    } else {
+        println(Messages.CURRENT_TURN.format(session.currentTurnPlayerId))
+    }
+    val viewerId = when (parsed.playerId) {
+        session.player1.id, session.player2.id -> parsed.playerId
+        else -> session.currentTurnPlayerId
+    }
+    print(BoardRenderer.renderForPlayer(session, viewerId))
+    printMoveHistory(session)
+}
+
+private fun printMoveHistory(session: battleship.core.GameSession) {
+    println(Messages.MOVE_HISTORY)
+    if (session.moves.isEmpty()) {
+        println(Messages.NO_MOVES)
+        return
+    }
+    session.moves.forEachIndexed { index, move ->
+        val playerName = when (move.playerId) {
+            session.player1.id -> session.player1.name
+            session.player2.id -> session.player2.name
+            else -> move.playerId
+        }
+        println(
+            Messages.MOVE_ENTRY.format(
+                index + 1,
+                playerName,
+                move.position.x,
+                move.position.y,
+                move.result.name,
+            ),
+        )
+    }
 }

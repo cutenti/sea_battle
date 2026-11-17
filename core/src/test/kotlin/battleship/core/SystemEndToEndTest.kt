@@ -10,8 +10,8 @@ class SystemEndToEndTest {
     fun `full fleet is sunk through the service and the rating is stored`() {
         val players = InMemoryPlayerRepository()
         val games = InMemoryGameRepository()
-        val service = GameService(players, games, GameEngine(GameRulesValidatorImpl()), GameRulesValidatorImpl())
-
+        val validator = GameRulesValidatorImpl()
+        val service = GameService(players, games, GameEngine(validator), validator)
         val alice = Player("p1", "Alice")
         val bob = Player("p2", "Bob")
         players.save(alice)
@@ -44,12 +44,13 @@ class SystemEndToEndTest {
     }
 
     @Test
-    fun `invalid, out of turn and repeated shots stay in the journal without passing the turn`() {
+    fun `invalid out of turn and repeated shots stay in the journal without passing the turn`() {
+        val validator = GameRulesValidatorImpl()
         val service = GameService(
             InMemoryPlayerRepository(),
             InMemoryGameRepository(),
-            GameEngine(GameRulesValidatorImpl()),
-            GameRulesValidatorImpl(),
+            GameEngine(validator),
+            validator,
         )
         val alice = Player("p1", "Alice")
         val bob = Player("p2", "Bob")

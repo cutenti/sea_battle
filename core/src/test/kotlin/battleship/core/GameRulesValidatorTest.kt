@@ -37,6 +37,7 @@ class GameRulesValidatorTest {
         val ship = Ship(listOf(Position(0, 0), Position(1, 0), Position(2, 0), Position(3, 0)))
 
         assertTrue(validator.canPlaceShip(emptyList(), ship))
+        assertTrue(validator.canPlaceShip(Board(emptyList()), ship))
         assertFalse(validator.validateBoard(Board(listOf(ship))))
     }
 
@@ -71,31 +72,37 @@ class GameRulesValidatorTest {
     }
 
     @Test
-    fun `validateBoard rejects an L-shaped ship even when the fleet sizes match`() {
+    fun `validateBoard rejects an L-shaped ship even when fleet sizes match`() {
         val ships = BoardFactory.createValidClassicalBoard().ships.toMutableList()
         ships[1] = Ship(listOf(Position(2, 8), Position(2, 9), Position(3, 9)))
         assertFalse(validator.validateBoard(Board(ships)))
     }
 
     @Test
-    fun `validateBoard rejects a diagonal ship`() {
-        val ships = BoardFactory.createValidClassicalBoard().ships.toMutableList()
-        ships[4] = Ship(listOf(Position(8, 8), Position(9, 9)))
-        assertFalse(validator.validateBoard(Board(ships)))
+    fun `validateBoard rejects diagonal ships and ships with gaps`() {
+        val classical = BoardFactory.createValidClassicalBoard().ships
+        val diagonal = classical.toMutableList().apply {
+            this[4] = Ship(listOf(Position(8, 8), Position(9, 9)))
+        }
+        val gap = classical.toMutableList().apply {
+            this[4] = Ship(listOf(Position(9, 3), Position(9, 8)))
+        }
+
+        assertFalse(validator.validateBoard(Board(diagonal)))
+        assertFalse(validator.validateBoard(Board(gap)))
     }
 
     @Test
-    fun `validateBoard rejects a ship with a gap`() {
-        val ships = BoardFactory.createValidClassicalBoard().ships.toMutableList()
-        ships[4] = Ship(listOf(Position(9, 3), Position(9, 8)))
-        assertFalse(validator.validateBoard(Board(ships)))
-    }
+    fun `validateBoard rejects a ship outside the board and overlapping ships`() {
+        val outside = BoardFactory.createValidClassicalBoard().ships.toMutableList().apply {
+            this[9] = Ship(listOf(Position(10, 6)))
+        }
+        val overlapping = BoardFactory.createValidClassicalBoard().ships.toMutableList().apply {
+            this[9] = Ship(listOf(Position(0, 0)))
+        }
 
-    @Test
-    fun `validateBoard rejects a cell outside the board`() {
-        val ships = BoardFactory.createValidClassicalBoard().ships.toMutableList()
-        ships[9] = Ship(listOf(Position(10, 6)))
-        assertFalse(validator.validateBoard(Board(ships)))
+        assertFalse(validator.validateBoard(Board(outside)))
+        assertFalse(validator.validateBoard(Board(overlapping)))
     }
 
     private fun session(): GameSession {

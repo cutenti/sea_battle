@@ -11,7 +11,6 @@ import battleship.core.Player
 import battleship.core.Position
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
@@ -68,7 +67,7 @@ class SystemTest {
     }
 
     @Test
-    fun `cli can add players start a match and record a move`() {
+    fun `cli adds players starts a match renders boards and records move history`() {
         val output = runMain(
             """
             add_player Alice
@@ -84,6 +83,9 @@ class SystemTest {
         assertTrue(output.contains("Игрок Alice добавлен. ID: p1"))
         assertTrue(output.contains("Игрок Bob добавлен. ID: p2"))
         assertTrue(output.contains("Игра g1 началась"))
+        assertTrue(output.contains("Ваше поле:"))
+        assertTrue(output.contains("Поле противника:"))
+        assertTrue(output.contains(Messages.MOVE_HISTORY))
         assertTrue(output.contains("Результат: "))
         assertTrue(output.contains("Журнал:\n1. p1 (0, 0)"))
     }
