@@ -1,90 +1,81 @@
 package battleship.core
 
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class SystemEndToEndTest {
 
     @Test
-    fun `Full game cycle from setup to finish`() {
-        // Инициализация системы
-        val playerRepo = InMemoryPlayerRepository()
-        val gameRepo = InMemoryGameRepository()
-        val engine = GameEngine(PermissiveBoardRulesValidator())
+    fun `full fleet is sunk through the service and the rating is stored`() {
+        val players = InMemoryPlayerRepository()
+        val games = InMemoryGameRepository()
+        val validator = GameRulesValidatorImpl()
+        val service = GameService(players, games, GameEngine(validator), validator)
+        val alice = Player("p1", "Alice")
+        val bob = Player("p2", "Bob")
+        players.save(alice)
+        players.save(bob)
 
-        // 1. Создание игроков
-        val p1 = Player("p1", "Alice")
-        val p2 = Player("p2", "Bob")
-        playerRepo.save(p1)
-        playerRepo.save(p2)
-
-        // 2. Создание игры (Один однопалубный корабль у каждого для скорости теста)
-        val b1 = Board(listOf(Ship(listOf(Position(5, 5)))))
-        val b2 = Board(listOf(Ship(listOf(Position(2, 2)))))
-        val session = GameSession("g1", p1, p2, b1, b2)
-        gameRepo.save(session)
-
-        assertTrue(engine.startGame(session))
-        // 3. Alice стреляет мимо
-        assertEquals(
-            MoveResult.MISS, 
-            engine.processMove(session, p1.id, Position(0, 0))
+        val session = service.startGame(
+            alice,
+            bob,
+            BoardFactory.createValidClassicalBoard(),
+            BoardFactory.createValidClassicalBoard(),
         )
+        assertEquals(GameState.IN_PROGRESS, session.state)
 
-        // 4. Bob стреляет мимо
-        assertEquals(
-            MoveResult.MISS, 
-            engine.processMove(session, p2.id, Position(1, 1))
-        )
+        val cells = session.board2.ships.flatMap { it.positions }
+        var last = MoveResult.MISS
+        for (cell in cells) {
+            assertEquals(alice.id, session.currentTurnPlayerId)
+            last = service.recordMove(session, alice.id, cell)
+        }
 
-        // 5. Alice стреляет второй раз, попадает и побеждает
-        val finalMove = engine.processMove(session, p1.id, Position(2, 2))
-        
-        // 6. Проверки инвариантности и финала
-        assertEquals(MoveResult.GAME_OVER, finalMove)
+        assertEquals(MoveResult.GAME_OVER, last)
         assertEquals(GameState.FINISHED, session.state)
-        assertEquals(p1.id, session.winnerId)
+        assertEquals(alice.id, session.winnerId)
+        assertEquals(1016, alice.rating)
+        assertEquals(984, bob.rating)
+        assertEquals(cells.size, session.moves.size)
+        assertEquals(session, games.findById(session.id))
+        assertEquals(1016, players.findById(alice.id)?.rating)
+        assertTrue(session.board2.isAllShipsSunk())
     }
 
     @Test
-    fun `System handles invalid moves, out of turn shots, and repeated shots gracefully`() {
-        val engine = GameEngine(PermissiveBoardRulesValidator())
-        val p1 = Player("p1", "Alice")
-        val p2 = Player("p2", "Bob")
-        val b1 = Board(listOf(Ship(listOf(Position(0, 0)))))
-        val b2 = Board(listOf(Ship(listOf(Position(9, 9)))))
-        val session = GameSession("g1", p1, p2, b1, b2)
-
-        assertTrue(engine.startGame(session))
-        // 1. Bob пытается выстрелить первым (не его очередь)
-        assertEquals(
-            MoveResult.INVALID_MOVE, 
-            engine.processMove(session, p2.id, Position(5, 5))
+    fun `invalid out of turn and repeated shots stay in the journal without passing the turn`() {
+        val validator = GameRulesValidatorImpl()
+        val service = GameService(
+            InMemoryPlayerRepository(),
+            InMemoryGameRepository(),
+            GameEngine(validator),
+            validator,
+        )
+        val alice = Player("p1", "Alice")
+        val bob = Player("p2", "Bob")
+        val session = service.startGame(
+            alice,
+            bob,
+            BoardFactory.createValidClassicalBoard(),
+            BoardFactory.createValidClassicalBoard(),
         )
 
-        // 2. Alice стреляет за пределы игрового поля (координаты 10, 10)
-        assertEquals(
-            MoveResult.INVALID_MOVE, 
-            engine.processMove(session, p1.id, Position(10, 10))
-        )
+        assertEquals(MoveResult.INVALID_MOVE, service.recordMove(session, bob.id, Position(5, 5)))
+        assertEquals(alice.id, session.currentTurnPlayerId)
 
-        // 3. Alice делает корректный выстрел, но промахивается
-        assertEquals(
-            MoveResult.MISS, 
-            engine.processMove(session, p1.id, Position(5, 5))
-        )
-        // Проверяем, что ход перешел к Бобу
-        assertEquals(p2.id, session.currentTurnPlayerId)
+        assertEquals(MoveResult.INVALID_MOVE, service.recordMove(session, alice.id, Position(10, 10)))
+        assertTrue(session.board2.shots.isEmpty())
 
-        // 4. Bob стреляет и тоже промахивается
-        engine.processMove(session, p2.id, Position(2, 2))
-        
-        // 5. Ход вернулся к Алисе. Она случайно стреляет в ту же самую клетку (5, 5)
-        assertEquals(
-            MoveResult.ALREADY_SHOT, 
-            engine.processMove(session, p1.id, Position(5, 5))
-        )
-        // При ALREADY_SHOT ход не передается, Алиса должна переходить
-        assertEquals(p1.id, session.currentTurnPlayerId)
+        assertEquals(MoveResult.MISS, service.recordMove(session, alice.id, Position(1, 0)))
+        assertEquals(bob.id, session.currentTurnPlayerId)
+
+        assertEquals(MoveResult.MISS, service.recordMove(session, bob.id, Position(1, 1)))
+        assertEquals(alice.id, session.currentTurnPlayerId)
+
+        assertEquals(MoveResult.ALREADY_SHOT, service.recordMove(session, alice.id, Position(1, 0)))
+        assertEquals(alice.id, session.currentTurnPlayerId)
+        assertEquals(5, session.moves.size)
+        assertEquals(1000, alice.rating)
     }
 }

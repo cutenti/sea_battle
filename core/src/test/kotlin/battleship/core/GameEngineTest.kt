@@ -1,108 +1,93 @@
 package battleship.core
 
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 class GameEngineTest {
-    private lateinit var validator: IGameRulesValidator
-    private lateinit var engine: GameEngine
+    private val engine = GameEngine(GameRulesValidatorImpl(), EloRatingCalculator())
 
-    @BeforeEach
-    fun setup() {
-        validator = PermissiveBoardRulesValidator()
-        engine = GameEngine(validator)
+    @Test
+    fun `processMove returns INVALID_MOVE while the session is in setup`() {
+        val session = session(Board(listOf(Ship(listOf(Position(0, 0))))), Board(emptyList()))
+
+        val result = engine.processMove(session, session.player1.id, Position(0, 0))
+
+        assertEquals(MoveResult.INVALID_MOVE, result)
+        assertEquals(GameState.SETUP, session.state)
     }
 
     @Test
     fun `processMove returns KILLED when non-last ship is sunk`() {
-        val p1 = Player("p1", "P1")
-        val p2 = Player("p2", "P2")
-        val b2 = Board(listOf(
-            Ship(listOf(Position(0, 0))),
-            Ship(listOf(Position(5, 5)))
-        ))
-        val session = GameSession("g1", p1, p2, Board(emptyList()), b2)
+        val session = started(
+            opponent = Board(listOf(Ship(listOf(Position(0, 0))), Ship(listOf(Position(5, 5))))),
+        )
 
-        assertTrue(engine.startGame(session))
-        val result = engine.processMove(session, p1.id, Position(0, 0))
+        val result = engine.processMove(session, session.player1.id, Position(0, 0))
 
         assertEquals(MoveResult.KILLED, result)
         assertEquals(GameState.IN_PROGRESS, session.state)
+        assertEquals(session.player1.id, session.currentTurnPlayerId)
     }
 
     @Test
     fun `processMove returns ALREADY_SHOT on repeating shot to the same cell`() {
-        val p1 = Player("p1", "P1")
-        val p2 = Player("p2", "P2")
-        val session = GameSession("g1", p1, p2, Board(emptyList()), Board(emptyList()))
+        val session = started(opponent = Board(emptyList()))
 
-        assertTrue(engine.startGame(session))
-        engine.processMove(session, p1.id, Position(0, 0))
+        engine.processMove(session, session.player1.id, Position(0, 0))
         session.switchTurn()
 
-        val result = engine.processMove(session, p1.id, Position(0, 0))
+        val result = engine.processMove(session, session.player1.id, Position(0, 0))
 
         assertEquals(MoveResult.ALREADY_SHOT, result)
+        assertEquals(1000, session.player1.rating)
     }
 
     @Test
-    fun `processMove returns GAME_OVER when last ship is sunk`() {
-        val p1 = Player("p1", "P1")
-        val p2 = Player("p2", "P2")
-        val b2 = Board(listOf(Ship(listOf(Position(0, 0)))))
-        val session = GameSession("g1", p1, p2, Board(emptyList()), b2)
+    fun `processMove returns GAME_OVER and updates elo when last ship is sunk`() {
+        val session = started(opponent = Board(listOf(Ship(listOf(Position(0, 0))))))
 
-        assertTrue(engine.startGame(session))
-        val result = engine.processMove(session, p1.id, Position(0, 0))
+        val result = engine.processMove(session, session.player1.id, Position(0, 0))
 
         assertEquals(MoveResult.GAME_OVER, result)
         assertEquals(GameState.FINISHED, session.state)
-        assertEquals(p1.id, session.winnerId)
-        assertEquals(1010, p1.rating)
-        assertEquals(990, p2.rating)
-        assertEquals(MoveResult.GAME_OVER, session.moves.single().result)
+        assertEquals(session.player1.id, session.winnerId)
+        assertEquals(1016, session.player1.rating)
+        assertEquals(984, session.player2.rating)
     }
 
     @Test
-    fun `startGame rejects invalid boards and leaves session in setup`() {
-        val strictEngine = GameEngine(GameRulesValidatorImpl())
+    fun `processMove does not change rating again after the game is finished`() {
+        val session = started(opponent = Board(listOf(Ship(listOf(Position(0, 0))))))
+        engine.processMove(session, session.player1.id, Position(0, 0))
+
+        val second = engine.processMove(session, session.player1.id, Position(1, 1))
+
+        assertEquals(MoveResult.INVALID_MOVE, second)
+        assertEquals(1016, session.player1.rating)
+        assertEquals(984, session.player2.rating)
+    }
+
+    @Test
+    fun `rating does not fall below zero`() {
+        val winner = Player("p1", "P1", rating = 10)
+        val loser = Player("p2", "P2", rating = 10)
         val session = GameSession(
             "g1",
-            Player("p1", "P1"),
-            Player("p2", "P2"),
+            winner,
+            loser,
             Board(emptyList()),
-            Board(emptyList())
+            Board(listOf(Ship(listOf(Position(0, 0))))),
         )
+        session.begin()
 
-        assertFalse(strictEngine.startGame(session))
-        assertEquals(GameState.SETUP, session.state)
-        assertEquals(MoveResult.INVALID_MOVE, strictEngine.processMove(session, "p1", Position(0, 0)))
+        engine.processMove(session, winner.id, Position(0, 0))
+
+        assertEquals(26, winner.rating)
+        assertEquals(0, loser.rating)
     }
 
-    @Test
-    fun `startGame validates both boards before starting`() {
-        val strictEngine = GameEngine(GameRulesValidatorImpl())
-        val session = GameSession(
-            "g1",
-            Player("p1", "P1"),
-            Player("p2", "P2"),
-            BoardFactory.createValidClassicalBoard(),
-            Board(emptyList())
-        )
+    private fun session(own: Board = Board(emptyList()), opponent: Board): GameSession =
+        GameSession("g1", Player("p1", "P1"), Player("p2", "P2"), own, opponent)
 
-        assertFalse(strictEngine.startGame(session))
-        assertEquals(GameState.SETUP, session.state)
-    }
-
-    @Test
-    fun `processMove adds invalid attempts to the move journal`() {
-        val p1 = Player("p1", "P1")
-        val p2 = Player("p2", "P2")
-        val session = GameSession("g1", p1, p2, Board(emptyList()), Board(emptyList()))
-        assertTrue(engine.startGame(session))
-
-        assertEquals(MoveResult.INVALID_MOVE, engine.processMove(session, p2.id, Position(0, 0)))
-        assertEquals(MoveRecord(p2.id, Position(0, 0), MoveResult.INVALID_MOVE), session.moves.single())
-    }
+    private fun started(opponent: Board): GameSession = session(opponent = opponent).also { it.begin() }
 }
