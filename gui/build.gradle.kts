@@ -17,6 +17,7 @@ tasks.test {
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":persistence"))
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
 }

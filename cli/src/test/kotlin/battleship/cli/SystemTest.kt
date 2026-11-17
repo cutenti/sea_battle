@@ -13,11 +13,16 @@ import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
+import java.nio.file.Files
+import java.nio.file.Path
 
 class SystemTest {
+    @TempDir
+    lateinit var tempDir: Path
 
     @Test
     fun `service engine and repositories agree on a hit`() {
@@ -89,20 +94,25 @@ class SystemTest {
         assertTrue(output.contains("Результат: "))
         assertTrue(output.contains("Журнал:\n1. p1 (0, 0)"))
     }
-}
 
-private fun runMain(script: String): String {
-    val inputStream = ByteArrayInputStream(script.toByteArray())
-    val outputStream = ByteArrayOutputStream()
-    val originalIn = System.`in`
-    val originalOut = System.out
-    return try {
-        System.setIn(inputStream)
-        System.setOut(PrintStream(outputStream))
-        assertDoesNotThrow { main() }
-        outputStream.toString("UTF-8")
-    } finally {
-        System.setIn(originalIn)
-        System.setOut(originalOut)
+    private fun runMain(script: String): String {
+        val inputStream = ByteArrayInputStream(script.toByteArray())
+        val outputStream = ByteArrayOutputStream()
+        val originalIn = System.`in`
+        val originalOut = System.out
+        val originalUserHome = System.getProperty("user.home")
+        val isolatedHome = Files.createTempDirectory(tempDir, "cli-home-")
+        return try {
+            System.setProperty("user.home", isolatedHome.toString())
+            System.setIn(inputStream)
+            System.setOut(PrintStream(outputStream))
+            assertDoesNotThrow { main() }
+            outputStream.toString("UTF-8")
+        } finally {
+            System.setIn(originalIn)
+            System.setOut(originalOut)
+            if (originalUserHome == null) System.clearProperty("user.home")
+            else System.setProperty("user.home", originalUserHome)
+        }
     }
 }

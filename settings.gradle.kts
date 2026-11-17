@@ -5,5 +5,6 @@ plugins {
 rootProject.name = "battleship-admin"
 
 include("core")
+include("persistence")
 include("cli")
 include("gui")

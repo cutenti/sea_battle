@@ -1,10 +1,9 @@
 package battleship.gui
 
 import battleship.core.Board
+import battleship.core.GameSession
 import battleship.core.BoardFactory
 import battleship.core.GameService
-import battleship.core.GameSession
-import battleship.core.GameState
 import battleship.core.IGameRulesValidator
 import battleship.core.MoveResult
 import battleship.core.Player
@@ -29,6 +28,8 @@ class GameController(
     private var finishedAtNanos: Long? = null
 
     fun players(): List<Player> = service.listPlayers()
+
+    fun games(): List<GameSession> = service.listGames()
 
     fun addPlayer(name: String): Player = service.addPlayer(name.trim())
 
@@ -58,12 +59,15 @@ class GameController(
     }
 
     fun statistics(): List<PlayerStatistics> {
-        val games = service.listGames()
+        val statistics = service.listPlayerStatistics().associateBy { it.playerId }
         return service.listPlayers().map { player ->
-            val playerGames = games.filter { it.player1.id == player.id || it.player2.id == player.id }
-            val wins = playerGames.count { it.state == GameState.FINISHED && it.winnerId == player.id }
-            val losses = playerGames.count { it.state == GameState.FINISHED && it.winnerId != player.id }
-            PlayerStatistics(player, playerGames.size, wins, losses)
+            val saved = statistics[player.id]
+            PlayerStatistics(
+                player,
+                gamesPlayed = saved?.gamesPlayed ?: 0,
+                wins = saved?.wins ?: 0,
+                losses = saved?.losses ?: 0,
+            )
         }.sortedWith(compareByDescending<PlayerStatistics> { it.player.rating }.thenBy { it.player.name })
     }
 }

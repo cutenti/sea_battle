@@ -21,9 +21,14 @@ class Player(val id: String, val name: String, rating: Int = 1000) {
     }
 }
 
-class Ship(val positions: List<Position>) {
+class Ship(val positions: List<Position>, hits: Set<Position> = emptySet()) {
     private val _hits = mutableSetOf<Position>()
     val hits: Set<Position> get() = _hits.toSet()
+
+    init {
+        require(hits.all { it in positions }) { "Попадания должны находиться на корабле" }
+        _hits.addAll(hits)
+    }
 
     fun addHit(pos: Position) {
         if (pos in positions) _hits.add(pos)
@@ -32,10 +37,14 @@ class Ship(val positions: List<Position>) {
     fun isSunk(): Boolean = positions.isNotEmpty() && _hits.size == positions.size
 }
 
-class Board(ships: List<Ship>) {
+class Board(ships: List<Ship>, shots: Set<Position> = emptySet()) {
     val ships: List<Ship> = ships.toList()
     private val _shots = mutableSetOf<Position>()
     val shots: Set<Position> get() = _shots.toSet()
+
+    init {
+        _shots.addAll(shots)
+    }
 
     fun addShot(pos: Position) {
         _shots.add(pos)
@@ -78,5 +87,37 @@ class GameSession(
 
     fun addMove(record: MoveRecord) {
         _moves.add(record)
+    }
+
+    companion object {
+        fun restore(
+            id: String,
+            player1: Player,
+            player2: Player,
+            board1: Board,
+            board2: Board,
+            state: GameState,
+            currentTurnPlayerId: String,
+            winnerId: String?,
+            moves: List<MoveRecord>,
+        ): GameSession {
+            require(player1.id != player2.id) { "Игроки партии должны различаться" }
+            require(currentTurnPlayerId == player1.id || currentTurnPlayerId == player2.id) {
+                "Текущий игрок должен участвовать в партии"
+            }
+            require(winnerId == null || winnerId == player1.id || winnerId == player2.id) {
+                "Победитель должен участвовать в партии"
+            }
+            require((state == GameState.FINISHED) == (winnerId != null)) {
+                "Завершённая партия должна иметь победителя"
+            }
+
+            return GameSession(id, player1, player2, board1, board2).also { session ->
+                session.state = state
+                session.currentTurnPlayerId = currentTurnPlayerId
+                session.winnerId = winnerId
+                session._moves.addAll(moves)
+            }
+        }
     }
 }

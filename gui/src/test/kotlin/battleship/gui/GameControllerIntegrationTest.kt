@@ -9,12 +9,20 @@ import battleship.core.InMemoryGameRepository
 import battleship.core.InMemoryPlayerRepository
 import battleship.core.MoveResult
 import battleship.core.Position
+import battleship.persistence.SqliteDatabase
+import battleship.persistence.SqliteGameRepository
+import battleship.persistence.SqlitePlayerRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Path
 
 class GameControllerIntegrationTest {
+    @TempDir
+    lateinit var tempDir: Path
+
     @Test
     fun `GUI controller starts a core game and sends a selected cell through the engine`() {
         val validator = GameRulesValidatorImpl()
@@ -82,5 +90,43 @@ class GameControllerIntegrationTest {
         assertEquals(1, statistics.getValue(second.id).losses)
         assertTrue(statistics.getValue(first.id).player.rating > second.rating)
         assertEquals(2, controller.elapsedSeconds())
+    }
+
+    @Test
+    fun `GUI controller reads persisted history and statistics after restart`() {
+        val validator = GameRulesValidatorImpl()
+        val databasePath = tempDir.resolve("gui.db")
+        val service = sqliteService(databasePath, validator)
+        val controller = GameController(service, validator, BoardFactory::createValidClassicalBoard)
+        val first = controller.addPlayer("Alice")
+        val second = controller.addPlayer("Bob")
+        val session = controller.startGame(first.id, second.id)
+
+        session.board2.ships.flatMap { it.positions }.forEach { position ->
+            controller.shoot(position)
+        }
+
+        val restartedController = GameController(
+            sqliteService(databasePath, validator),
+            validator,
+            BoardFactory::createValidClassicalBoard,
+        )
+        val statistics = restartedController.statistics().associateBy { it.player.id }
+
+        assertEquals(1, restartedController.games().size)
+        assertEquals(session.id, restartedController.games().single().id)
+        assertEquals(1, statistics.getValue(first.id).gamesPlayed)
+        assertEquals(1, statistics.getValue(first.id).wins)
+        assertEquals(1, statistics.getValue(second.id).losses)
+    }
+
+    private fun sqliteService(databasePath: Path, validator: GameRulesValidatorImpl): GameService {
+        val database = SqliteDatabase(databasePath)
+        return GameService(
+            players = SqlitePlayerRepository(database),
+            games = SqliteGameRepository(database),
+            engine = GameEngine(validator, EloRatingCalculator()),
+            validator = validator,
+        )
     }
 }
