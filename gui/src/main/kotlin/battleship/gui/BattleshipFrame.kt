@@ -11,6 +11,7 @@ import java.awt.Dimension
 import java.awt.Font
 import java.awt.GridLayout
 import java.io.IOException
+import java.sql.SQLException
 import javax.swing.BorderFactory
 import javax.swing.DefaultComboBoxModel
 import javax.swing.DefaultListCellRenderer
@@ -24,6 +25,7 @@ import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JSplitPane
 import javax.swing.JTable
+import javax.swing.JTabbedPane
 import javax.swing.JTextArea
 import javax.swing.JTextField
 import javax.swing.SwingConstants
@@ -49,7 +51,12 @@ internal class BattleshipFrame(private val controller: GameController) : JFrame(
     }
     private val statisticsModel = StatisticsTableModel()
     private val playersTable = JTable(statisticsModel)
-    private val playersPane = JScrollPane(playersTable)
+    private val gamesModel = GameHistoryTableModel()
+    private val gamesTable = JTable(gamesModel)
+    private val playersPane = JTabbedPane().apply {
+        addTab("Игроки", JScrollPane(playersTable))
+        addTab("История партий", JScrollPane(gamesTable))
+    }
     private val clock = Timer(1000) { updateTimer() }
 
     init {
@@ -145,6 +152,8 @@ internal class BattleshipFrame(private val controller: GameController) : JFrame(
         secondPlayer.renderer = renderer
         playersTable.fillsViewportHeight = true
         playersTable.preferredScrollableViewportSize = Dimension(280, 400)
+        gamesTable.fillsViewportHeight = true
+        gamesTable.preferredScrollableViewportSize = Dimension(280, 400)
     }
 
     private fun addPlayer() {
@@ -157,6 +166,8 @@ internal class BattleshipFrame(private val controller: GameController) : JFrame(
             refreshStatistics()
         } catch (error: IOException) {
             showError(error.message ?: "Не удалось сохранить реестр игроков")
+        } catch (error: SQLException) {
+            showError(error.message ?: "Не удалось сохранить игрока в базе данных")
         } catch (error: IllegalArgumentException) {
             showError(error.message ?: "Некорректное имя игрока")
         }
@@ -175,6 +186,8 @@ internal class BattleshipFrame(private val controller: GameController) : JFrame(
             showError(error.message ?: "Не удалось начать партию")
         } catch (error: IllegalStateException) {
             showError(error.message ?: "Не удалось создать игровое поле")
+        } catch (error: SQLException) {
+            showError(error.message ?: "Не удалось сохранить партию в базе данных")
         }
     }
 
@@ -187,6 +200,10 @@ internal class BattleshipFrame(private val controller: GameController) : JFrame(
             refreshGame()
             refreshStatistics()
             showError(error.message ?: "Ход выполнен, но не удалось сохранить рейтинг")
+        } catch (error: SQLException) {
+            refreshGame()
+            refreshStatistics()
+            showError(error.message ?: "Ход выполнен, но не удалось сохранить партию")
         } catch (error: IllegalStateException) {
             showError(error.message ?: "Нельзя выполнить ход")
         }
@@ -240,6 +257,7 @@ internal class BattleshipFrame(private val controller: GameController) : JFrame(
 
     private fun refreshStatistics() {
         statisticsModel.update(controller.statistics())
+        gamesModel.update(controller.games())
     }
 
     private fun updateTimer() {
@@ -333,6 +351,36 @@ private class StatisticsTableModel : AbstractTableModel() {
             2 -> row.gamesPlayed
             3 -> row.wins
             4 -> row.losses
+            else -> error("Unknown column $columnIndex")
+        }
+    }
+}
+
+private class GameHistoryTableModel : AbstractTableModel() {
+    private val columns = listOf("Партия", "Игроки", "Состояние", "Победитель", "Ходов")
+    private var rows = emptyList<GameSession>()
+
+    fun update(values: List<GameSession>) {
+        rows = values.asReversed()
+        fireTableDataChanged()
+    }
+
+    override fun getRowCount(): Int = rows.size
+    override fun getColumnCount(): Int = columns.size
+    override fun getColumnName(column: Int): String = columns[column]
+
+    override fun getValueAt(rowIndex: Int, columnIndex: Int): Any {
+        val game = rows[rowIndex]
+        return when (columnIndex) {
+            0 -> game.id
+            1 -> "${game.player1.name} — ${game.player2.name}"
+            2 -> game.state.name
+            3 -> when (game.winnerId) {
+                game.player1.id -> game.player1.name
+                game.player2.id -> game.player2.name
+                else -> "—"
+            }
+            4 -> game.moves.size
             else -> error("Unknown column $columnIndex")
         }
     }

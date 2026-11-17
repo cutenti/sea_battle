@@ -24,6 +24,8 @@ class GameService(
 
     fun listGames(): List<GameSession> = games.findAll()
 
+    fun listPlayerStatistics(): List<PlayerGameStatistics> = games.findPlayerStatistics()
+
     /**
      * Партия создаётся в [GameState.SETUP] и переводится в [GameState.IN_PROGRESS]
      * только после проверки обеих расстановок.

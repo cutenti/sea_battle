@@ -6,17 +6,20 @@ import battleship.core.GameEngine
 import battleship.core.GameRulesValidatorImpl
 import battleship.core.GameService
 import battleship.core.GameState
-import battleship.core.InMemoryGameRepository
-import battleship.core.InMemoryPlayerRepository
 import battleship.core.InvalidGameSetupException
 import battleship.core.Position
+import battleship.persistence.SqliteDatabase
+import battleship.persistence.SqliteGameRepository
+import battleship.persistence.SqlitePlayerRepository
+import java.nio.file.Path
 import java.util.Scanner
 
 fun main() {
     val validator = GameRulesValidatorImpl()
+    val database = SqliteDatabase(Path.of(System.getProperty("user.home"), ".sea-battle", "battleship.db"))
     val service = GameService(
-        players = InMemoryPlayerRepository(),
-        games = InMemoryGameRepository(),
+        players = SqlitePlayerRepository(database),
+        games = SqliteGameRepository(database),
         engine = GameEngine(validator, EloRatingCalculator()),
         validator = validator,
     )

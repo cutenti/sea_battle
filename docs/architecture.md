@@ -4,7 +4,8 @@
 
 - `core` содержит модели партии, правила, игровой сервис и движок, генератор доски, рейтинг и интерфейсы репозиториев. Он не зависит от UI.
 - `cli` принимает команды, вызывает API `core` и отображает поля и журнал.
-- `gui` содержит Swing-приложение, контроллер игрового экрана и CSV-реализацию реестра игроков.
+- `gui` содержит Swing-приложение, контроллер, статистику и таблицу истории партий.
+- `persistence` реализует интерфейсы репозиториев поверх SQLite и зависит от `core`, но не от UI.
 
 ## Модели
 
@@ -22,12 +23,14 @@
 - `GameService` реализует сценарии добавления и поиска игроков, создания проверенной партии и записи хода. При старте он проверяет обе доски и переводит сессию из `SETUP` в `IN_PROGRESS`; запись результата в журнал и сохранение партии также выполняются сервисом.
 - `GameEngine.processMove(session, playerId, pos)` проверяет выстрел, обновляет попадания, очередь, состояние партии и рейтинг при победе.
 - `IRatingCalculator.calculateRatingChange(winner, loser)` предоставляет величину изменения рейтинга. GUI и CLI используют `EloRatingCalculator` с K=32; `FixedRatingCalculator` оставлен как простая фиксированная политика.
-- `IPlayerRepository` и `IGameRepository` задают операции `save`, `findById` и `findAll`. `InMemoryPlayerRepository` и `InMemoryGameRepository` реализуют их на `MutableMap`.
+- `IPlayerRepository` и `IGameRepository` задают операции `save`, `findById` и `findAll`; `IGameRepository` также предоставляет статистику партий по игроку. `InMemoryPlayerRepository` и `InMemoryGameRepository` остаются адаптерами для тестов.
+- `SqliteDatabase`, `SqlitePlayerRepository` и `SqliteGameRepository` находятся в модуле `persistence`. Игроки, партии, доски, корабли, выстрелы, журнал ходов и статистика записываются в таблицы SQLite.
 - `BoardFactory.createRandomBoard()` генерирует случайную классическую расстановку.
 - `GameController` связывает UI с `GameService`, управляет текущей партией, таймером и локальными статистиками.
 - `BattleshipFrame` отрисовывает оба поля, счёт и историю, позволяет добавлять игроков/запускать партию/делать выстрелы и сворачивать таблицу игроков.
-- `CsvPlayerRepository` реализует `IPlayerRepository`, хранит ID, имя и рейтинг игроков в UTF-8 CSV с атомарной заменой файла. Приложение GUI использует `~/.sea-battle/players.csv`; ошибка чтения или записи не подменяется пустым реестром.
-- Таблица статистики считает игры, победы и поражения по сессиям текущего запуска. Рейтинг сохраняется в CSV, а игровая история пока остаётся в памяти.
+- `CsvPlayerRepository` сохранён как адаптер для импорта ранее созданного `~/.sea-battle/players.csv`; GUI переносит отсутствующие в SQLite профили, не перезаписывая уже сохранённые данные.
+- Таблица `player_statistics` хранит число начатых партий, побед и поражений. Счётчик игр увеличивается при первой записи партии, а победа/поражение — только при переходе в `FINISHED`; повторное сохранение завершённой партии не дублирует результат.
+- CLI и GUI используют общую базу `~/.sea-battle/battleship.db`. Партия восстанавливается из сохранённых досок, попаданий, выстрелов, очереди и журнала ходов.
 
 GUI запускается командой `./gradlew :gui:run`.
 
@@ -35,9 +38,11 @@ GUI запускается командой `./gradlew :gui:run`.
 
 1. CLI или GUI создаёт игроков через `IPlayerRepository`, генерирует обе доски и передаёт их в `GameService.startGame`.
 2. `GameService` проверяет обе расстановки через `IGameRulesValidator`; невалидные доски не запускают партию. При успехе сессия переходит из `SETUP` в `IN_PROGRESS` и сохраняется через `IGameRepository`.
-3. UI передаёт выстрел сервису. Сервис вызывает `GameEngine.processMove`, заносит результат (в том числе отклонённую попытку) в `GameSession.moves` и сохраняет сессию.
-4. Движок проверяет состояние, очередь и координаты. Повторный выстрел возвращает `ALREADY_SHOT`; попадание оставляет ход текущему игроку, промах передаёт очередь. Потопление последнего корабля завершает партию и обновляет рейтинг.
-5. GUI отображает поля, счёт попаданий, таймер, журнал и статистику игроков. `CsvPlayerRepository` сохраняет имена и рейтинг на диск; сами партии и промежуточные победы/поражения хранятся в памяти текущего запуска.
+3. SQLite-репозиторий транзакционно записывает новую партию, обе доски и увеличивает счётчик игр обоих игроков.
+4. UI передаёт выстрел сервису. Сервис вызывает `GameEngine.processMove`, заносит результат (в том числе отклонённую попытку) в `GameSession.moves` и сохраняет сессию.
+5. Движок проверяет состояние, очередь и координаты. Повторный выстрел возвращает `ALREADY_SHOT`; попадание оставляет ход текущему игроку, промах передаёт очередь. Потопление последнего корабля завершает партию и обновляет рейтинг.
+6. При переходе партии в `FINISHED` репозиторий один раз увеличивает статистику победителя и проигравшего. Состояние игры, рейтинг и статистика хранятся в базе и доступны после перезапуска.
+7. GUI отображает поля, счёт попаданий, таймер, журнал ходов, статистику игроков и историю партий. CLI выводит данные из той же базы SQLite.
 
 ## Диаграмма
 
@@ -128,6 +133,7 @@ classDiagram
         +listPlayers() List~Player~
         +findGame(id) GameSession?
         +listGames() List~GameSession~
+        +listPlayerStatistics() List~PlayerGameStatistics~
         +startGame(player1, player2, board1, board2) GameSession
         +recordMove(session, playerId, pos) MoveResult
     }
@@ -142,10 +148,14 @@ classDiagram
         +save(session)
         +findById(id) GameSession?
         +findAll() List~GameSession~
+        +findPlayerStatistics() List~PlayerGameStatistics~
     }
     class InMemoryPlayerRepository
     class InMemoryGameRepository
     class CsvPlayerRepository
+    class SqliteDatabase
+    class SqlitePlayerRepository
+    class SqliteGameRepository
     class BattleshipFrame
     class BoardFactory {
         <<object>>
@@ -154,6 +164,7 @@ classDiagram
     }
     class GameController {
         +players() List~Player~
+        +games() List~GameSession~
         +addPlayer(name) Player
         +startGame(firstPlayerId, secondPlayerId) GameSession
         +shoot(position) MoveResult
@@ -166,8 +177,12 @@ classDiagram
         +int wins
         +int losses
     }
-    class BattleshipFrame
-
+    class PlayerGameStatistics {
+        +String playerId
+        +int gamesPlayed
+        +int wins
+        +int losses
+    }
     Board "1" *-- "0..*" Ship
     GameSession "1" *-- "2" Board
     GameSession "1" --> "2" Player
@@ -178,7 +193,11 @@ classDiagram
     IGameEngine <|.. GameEngine
     IPlayerRepository <|.. InMemoryPlayerRepository
     IPlayerRepository <|.. CsvPlayerRepository
+    IPlayerRepository <|.. SqlitePlayerRepository
     IGameRepository <|.. InMemoryGameRepository
+    IGameRepository <|.. SqliteGameRepository
+    SqlitePlayerRepository --> SqliteDatabase
+    SqliteGameRepository --> SqliteDatabase
     GameService --> IGameRepository
     GameService --> IPlayerRepository
     GameService --> IGameEngine
